@@ -69,6 +69,46 @@
                      border: 1px solid var(--line); background: var(--panel); color: var(--ink); cursor: pointer; }
   button:disabled { opacity: .5; cursor: wait; }
   .foot { font-size: 12px; color: var(--muted); text-align: center; padding: 0 16px 6px; }
+
+  /* ---------- village faces ---------- */
+  .stage { position: sticky; top: 0; z-index: 5; background: var(--bg); border-bottom: 1px solid var(--line);
+           display: flex; justify-content: center; align-items: flex-end; gap: 22px; padding: 8px 16px 6px; }
+  .face { --c: var(--other); width: 78px; text-align: center; opacity: .5; cursor: pointer;
+          transition: width .3s, opacity .3s; background: none; border: 0; padding: 0; color: inherit; font: inherit; }
+  .face.active { width: 112px; opacity: 1; }
+  .face.guest { opacity: .85; }
+  .face svg { width: 100%; height: auto; display: block; overflow: visible; }
+  .face .name { font-size: 12px; font-weight: 700; color: var(--c); line-height: 1.2; }
+  .face .state { font-size: 11px; color: var(--muted); min-height: 15px; }
+  .face .tilt, .face .body, .face .eyes ellipse, .face .mouth-open, .face .spin, .face .hop, .face .pupils
+    { transform-box: fill-box; transform-origin: center; }
+  .face .tilt { transition: transform .4s; }
+  .face .body { animation: bob 3.4s ease-in-out infinite; }
+  .face .eyes ellipse { animation: blink 5.5s infinite; }
+  .face.v-woensel .eyes ellipse:last-of-type { animation: wink 9s infinite; }
+  .face .pupils { transition: transform .4s; }
+  .face .ring { opacity: 0; transition: opacity .3s; }
+  .face .mouth-open { display: none; }
+  .face .spin { animation: spin 9s linear infinite; }
+  .face .hop { animation: hop 2.6s ease-in-out infinite; }
+  .face.thinking .pupils { transform: translate(2px, -3px); }
+  .face.thinking .ring { opacity: .35; animation: pulse 1.2s ease-in-out infinite; }
+  .face.listening .tilt { transform: rotate(-5deg); }
+  .face.talking .ring { opacity: .9; animation: pulse .8s ease-in-out infinite; }
+  .face.talking .mouth-idle { display: none; }
+  .face.talking .mouth-open { display: inline; animation: talk .17s ease-in-out infinite alternate; }
+  .face.talking .spin { animation-duration: 1.5s; }
+  .face.talking .hop { animation-duration: .7s; }
+  @keyframes bob { 0%, 100% { transform: translateY(0); } 50% { transform: translateY(-3px); } }
+  @keyframes blink { 0%, 93%, 100% { transform: scaleY(1); } 96% { transform: scaleY(.1); } }
+  @keyframes wink { 0%, 80%, 88%, 100% { transform: scaleY(1); } 84% { transform: scaleY(.1); } }
+  @keyframes talk { from { transform: scaleY(.25); } to { transform: scaleY(1.1); } }
+  @keyframes pulse { 0%, 100% { stroke-width: 3; } 50% { stroke-width: 7; } }
+  @keyframes spin { to { transform: rotate(360deg); } }
+  @keyframes hop { 0%, 100% { transform: translateY(0); } 50% { transform: translateY(-5px); } }
+  @media (prefers-reduced-motion: reduce) { .face * { animation: none !important; } }
+  @media (max-width: 600px) { .stage { gap: 10px; } .face { width: 62px; } .face.active { width: 92px; } }
+  .voice-label input { margin: 0; }
 </style>
 </head>
 <body>
@@ -76,6 +116,8 @@
   <h1>Six Villages, One City</h1>
   <div class="sub">Proof of concept · Eindhoven's former villages answer from their own checked facts · <span id="model">…</span></div>
 </header>
+
+<div class="stage" id="stage" aria-label="The villages. Click a face to talk to that village."></div>
 
 <main id="chat">
   <p class="intro">Ask in English or Dutch. Each fact a village uses shows up under its answer, with its source.
@@ -96,6 +138,9 @@
         <option value="en">English</option>
         <option value="nl">Nederlands</option>
       </select>
+    </label>
+    <label class="voice-label" title="The browser reads answers aloud with a synthetic voice">
+      <input type="checkbox" id="voice"> Speak answers (AI voice)
     </label>
   </div>
   <div class="suggest" id="suggest"></div>
@@ -129,6 +174,123 @@ const MATCH_PRESETS = [
 const COLORS = { gestel: "var(--gestel)", strijp: "var(--strijp)", woensel: "var(--woensel)" };
 
 const $ = (id) => document.getElementById(id);
+
+// ---------- village faces ----------
+// Every village is a lantern in its own colour (City of Light), with a feature from its persona.
+// Drawn in SVG, so nothing to download and it works offline at an event.
+// A village without its own design gets the plain lantern.
+const INK = "#2a2a2a", PANEL = "#fff6dc";
+const FACES = {
+  gestel: {   // the Genneper watermill: unhurried and dry, a water wheel on top, heavy lids
+    top: `<g class="spin"><circle cx="60" cy="26" r="15" fill="none" stroke="var(--c)" stroke-width="4"/>
+          ${[0, 45, 90, 135].map((a) => `<line x1="60" y1="9" x2="60" y2="43" stroke="var(--c)" stroke-width="3" transform="rotate(${a} 60 26)"/>`).join("")}</g>`,
+    brows: `<path d="M41 66 L55 67 M65 67 L79 66" stroke="${INK}" stroke-width="3" stroke-linecap="round"/>`,
+    eyes: `<ellipse cx="48" cy="77" rx="5" ry="3.5"/><ellipse cx="72" cy="77" rx="5" ry="3.5"/>`,
+    lids: `<path d="M42 75 Q48 71 54 75 M66 75 Q72 71 78 75" stroke="${INK}" stroke-width="2.5" fill="none"/>`,
+    mouth: `M50 98 Q60 101 70 98`,
+  },
+  strijp: {   // Het Kanon: direct and sporty, a ball on top and a club stripe
+    top: `<g class="hop"><circle cx="60" cy="24" r="12" fill="#fff" stroke="${INK}" stroke-width="2.5"/>
+          <path d="M60 18 l5 4 -2 6 h-6 l-2 -6 z" fill="${INK}"/></g>`,
+    brows: `<path d="M41 64 L55 69 M79 64 L65 69" stroke="${INK}" stroke-width="3.5" stroke-linecap="round"/>`,
+    eyes: `<ellipse cx="48" cy="77" rx="5" ry="5.5"/><ellipse cx="72" cy="77" rx="5" ry="5.5"/>`,
+    band: `<rect x="22" y="114" width="76" height="7" fill="#fff" opacity=".85"/>`,
+    mouth: `M50 97 Q63 103 71 94`,
+  },
+  woensel: {  // the Oude Toren: warm and cheeky, a church spire on top, big grin and a wink
+    top: `<path d="M60 2 L44 40 H76 Z" fill="var(--c)"/><path d="M60 2 L44 40 H76 Z" fill="#000" opacity=".18"/>
+          <circle cx="60" cy="27" r="5" fill="${PANEL}"/>`,
+    brows: `<path d="M41 66 Q48 60 55 65 M65 65 Q72 60 79 66" stroke="${INK}" stroke-width="3" fill="none" stroke-linecap="round"/>`,
+    eyes: `<ellipse cx="48" cy="77" rx="5.5" ry="6.5"/><ellipse cx="72" cy="77" rx="5.5" ry="6.5"/>`,
+    cheeks: `<circle cx="41" cy="90" r="5" fill="#f08a7a" opacity=".45"/><circle cx="79" cy="90" r="5" fill="#f08a7a" opacity=".45"/>`,
+    mouth: `M46 93 Q60 108 74 93`,
+  },
+};
+const PLAIN_FACE = {
+  top: `<path d="M48 40 Q60 18 72 40" fill="none" stroke="var(--c)" stroke-width="4"/>`,
+  brows: "", eyes: `<ellipse cx="48" cy="77" rx="5" ry="5.5"/><ellipse cx="72" cy="77" rx="5" ry="5.5"/>`,
+  mouth: `M50 96 Q60 102 70 96`,
+};
+const STATE_TEXT = { thinking: "thinking…", talking: "speaking", listening: "listening", passed: "nothing to add" };
+
+function faceSvg(name) {
+  const f = FACES[name] || PLAIN_FACE;
+  return `<svg viewBox="0 0 120 145" aria-hidden="true"><g class="tilt"><g class="body">
+      <circle class="ring" cx="60" cy="84" r="55" fill="none" stroke="var(--c)" stroke-width="3"/>
+      ${f.top}
+      <rect x="22" y="38" width="76" height="92" rx="30" fill="var(--c)"/>
+      ${f.band || ""}
+      <rect x="31" y="50" width="58" height="60" rx="22" fill="${PANEL}"/>
+      ${f.brows}
+      <g class="pupils"><g class="eyes" fill="${INK}">${f.eyes}</g></g>
+      ${f.lids || ""}${f.cheeks || ""}
+      <path class="mouth-idle" d="${f.mouth}" fill="none" stroke="${INK}" stroke-width="3" stroke-linecap="round"/>
+      <ellipse class="mouth-open" cx="60" cy="98" rx="7" ry="6" fill="#7a2e2e"/>
+      <rect x="40" y="127" width="40" height="9" rx="3" fill="var(--c)" opacity=".75"/>
+    </g></g></svg>`;
+}
+
+function buildStage(villages) {
+  for (const v of villages) {
+    const b = document.createElement("button");
+    b.type = "button"; b.className = "face v-" + v.name; b.dataset.village = v.name;
+    b.style.setProperty("--c", COLORS[v.name] || "var(--other)");
+    b.title = `Talk to ${v.label}`;
+    b.innerHTML = `${faceSvg(v.name)}<div class="name">${esc(v.label)}</div><div class="state"></div>`;
+    b.onclick = () => { if (busy) return; $("village").value = v.name; $("village").dispatchEvent(new Event("change")); };
+    $("stage").appendChild(b);
+  }
+  syncStage();
+}
+
+// Which face is big (the one you talk to) and which one listens.
+function syncStage() {
+  document.querySelectorAll(".face").forEach((f) => {
+    f.classList.toggle("active", f.dataset.village === $("village").value);
+    f.classList.toggle("guest", f.dataset.village === $("guest").value);
+  });
+}
+
+function setFace(name, state) {
+  const f = document.querySelector(`.face[data-village="${name}"]`);
+  if (!f) return;
+  f.classList.remove("thinking", "talking", "listening", "passed");
+  if (state) f.classList.add(state);
+  f.querySelector(".state").textContent = STATE_TEXT[state] || "";
+}
+const resetFaces = () => document.querySelectorAll(".face").forEach((f) => setFace(f.dataset.village, ""));
+
+// ---------- optional voice ----------
+// The browser's own speech (free, offline, no key). Each village gets its own pitch and pace.
+// Off by default; the checkbox label says it is an AI voice (AI Act art. 50).
+const VOICES = { gestel: { rate: 0.88, pitch: 0.7 }, strijp: { rate: 1.08, pitch: 0.95 }, woensel: { rate: 1.05, pitch: 1.25 } };
+const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+
+function pickVoice(langTag) {
+  const all = window.speechSynthesis ? speechSynthesis.getVoices() : [];
+  return all.find((v) => v.lang === langTag) || all.find((v) => v.lang.startsWith(langTag.slice(0, 2))) || null;
+}
+
+// Moves the face's mouth for as long as the answer lasts: spoken aloud, or a reading time.
+async function speakAs(name, text, lang) {
+  const clean = (text || "").replace(/\[[^\]]*\]/g, "").replace(/\s+/g, " ").trim();
+  if (!clean) return;
+  setFace(name, "talking");
+  const readTime = Math.min(9000, Math.max(1500, clean.length * 55));
+  if (!$("voice").checked || !window.speechSynthesis) { await sleep(readTime); setFace(name, ""); return; }
+  await new Promise((done) => {
+    const u = new SpeechSynthesisUtterance(clean);
+    u.lang = lang === "nl" ? "nl-NL" : "en-GB";
+    const v = pickVoice(u.lang); if (v) u.voice = v;
+    Object.assign(u, VOICES[name] || {});
+    const finish = () => { clearTimeout(guard); done(); };
+    const guard = setTimeout(finish, readTime * 3 + 4000);   // some browsers never fire "end"
+    u.onend = u.onerror = finish;
+    speechSynthesis.speak(u);
+  });
+  setFace(name, "");
+}
+
 let history = [];          // the last few turns with the current village, so follow-ups work
 let lastLang = "en";       // a question like "ok" keeps the language of the one before
 let busy = false;
@@ -172,6 +334,8 @@ async function ask(question) {
   document.querySelectorAll(".suggest button").forEach((b) => (b.disabled = true));
   const village = $("village").value, guest = $("guest").value;
   add(`<div class="bubble">${esc(question)}</div>`, "you");
+  if (window.speechSynthesis) speechSynthesis.cancel();
+  resetFaces(); setFace(village, "thinking"); if (guest) setFace(guest, "listening");
 
   // An honest waiting line with a stopwatch: a local model on a laptop takes a few seconds.
   const label = $("village").selectedOptions[0].textContent;
@@ -186,16 +350,23 @@ async function ask(question) {
     });
     const data = await res.json();
     wait.remove();
-    if (data.error) { add(`<div class="warn">${esc(data.error)}</div>`, ""); return; }
+    if (data.error) { resetFaces(); add(`<div class="warn">${esc(data.error)}</div>`, ""); return; }
     lastLang = data.lang;
     add(villageHtml(data.home, data.lang, false), "", COLORS[data.home.village]);
+    if (data.guest) setFace(data.guest.village, "listening");
+    await speakAs(data.home.village, data.home.text, data.lang);
     if (data.guest) {
-      if (data.guest.passed) add(`${esc(data.guest.label)} listened and had nothing to add.`, "pass");
-      else add(villageHtml(data.guest, data.lang, true), "reaction", COLORS[data.guest.village]);
+      if (data.guest.passed) {
+        add(`${esc(data.guest.label)} listened and had nothing to add.`, "pass");
+        setFace(data.guest.village, "passed"); setTimeout(() => setFace(data.guest.village, ""), 2500);
+      } else {
+        add(villageHtml(data.guest, data.lang, true), "reaction", COLORS[data.guest.village]);
+        await speakAs(data.guest.village, data.guest.text, data.lang);
+      }
     }
     history = history.concat([{ role: "user", content: question }, { role: "assistant", content: data.home.text }]).slice(-6);
   } catch (e) {
-    wait.remove();
+    wait.remove(); resetFaces();
     add(`<div class="warn">The page lost the server. Is <code>python3 demo_page.py</code> still running?</div>`, "");
   } finally {
     clearInterval(timer); busy = false; $("send").disabled = false; $("matchBtn").disabled = false; $("q").focus();
@@ -214,6 +385,8 @@ async function matchMe(profileText) {
   busy = true; $("send").disabled = true; $("matchBtn").disabled = true; $("q").value = "";
   document.querySelectorAll(".suggest button").forEach((b) => (b.disabled = true));
   add(`<div class="bubble"><strong>Match me to a village:</strong> ${esc(profile)}</div>`, "you");
+  if (window.speechSynthesis) speechSynthesis.cancel();
+  document.querySelectorAll(".face").forEach((f) => setFace(f.dataset.village, "thinking"));
 
   const wait = add(`<div class="thinking">All three villages are pitching their side of Eindhoven… <span>0</span> s</div>`, "");
   const t0 = Date.now();
@@ -226,10 +399,12 @@ async function matchMe(profileText) {
     });
     const data = await res.json();
     wait.remove();
-    if (data.error) { add(`<div class="warn">${esc(data.error)}</div>`, ""); return; }
+    if (data.error) { resetFaces(); add(`<div class="warn">${esc(data.error)}</div>`, ""); return; }
     lastLang = data.lang;
+    resetFaces();
     for (const p of data.pitches) {
       add(villageHtml(p, data.lang, false), "", COLORS[p.village]);
+      await speakAs(p.village, p.text, data.lang);
     }
     const pickDiv = add(`<div class="pick-row"><span>Which village fits you best? Click one to continue talking to it:</span></div>`, "");
     const row = pickDiv.querySelector(".pick-row");
@@ -241,6 +416,7 @@ async function matchMe(profileText) {
         $("village").value = p.village;
         const other = data.pitches.find((x) => x.village !== p.village);
         $("guest").value = other ? other.village : "";
+        syncStage();
         history = [{ role: "user", content: profile }, { role: "assistant", content: p.text }];
         $("q").placeholder = `Ask ${p.label} a follow-up question…`;
         const followUps = data.lang === "nl"
@@ -271,7 +447,7 @@ async function matchMe(profileText) {
       row.appendChild(btn);
     }
   } catch (e) {
-    wait.remove();
+    wait.remove(); resetFaces();
     add(`<div class="warn">The page lost the server. Is <code>python3 demo_page.py</code> still running?</div>`, "");
   } finally {
     clearInterval(timer); busy = false; $("send").disabled = false; $("matchBtn").disabled = false; $("q").focus();
@@ -290,6 +466,10 @@ async function init() {
   // Default demo: Gestel answers, Strijp listens.
   if (info.villages.some((v) => v.name === "gestel")) $("village").value = "gestel";
   if (info.villages.some((v) => v.name === "strijp")) $("guest").value = "strijp";
+  buildStage(info.villages);
+  $("village").addEventListener("change", syncStage);
+  $("guest").addEventListener("change", syncStage);
+  if (window.speechSynthesis) speechSynthesis.getVoices();   // loads the voice list early
   // A new village means a new conversation: the old history belongs to someone else.
   $("village").addEventListener("change", () => { history = []; if ($("guest").value === $("village").value) $("guest").value = ""; });
   for (const m of MATCH_PRESETS) {
